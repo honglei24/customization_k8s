@@ -119,6 +119,11 @@ func newContainerAnnotations(container *v1.Container, pod *v1.Pod, restartCount 
 		annotations[a.Name] = a.Value
 	}
 
+	annotations["BlkioDeviceReadIOps"]=pod.Annotations["BlkioDeviceReadIOps"]
+	annotations["BlkioDeviceWriteIOps"]=pod.Annotations["BlkioDeviceWriteIOps"]
+	annotations["BlkioDeviceReadBps"]=pod.Annotations["BlkioDeviceReadBps"]
+	annotations["BlkioDeviceWriteBps"]=pod.Annotations["BlkioDeviceWriteBps"]
+
 	annotations[containerHashLabel] = strconv.FormatUint(kubecontainer.HashContainer(container), 16)
 	annotations[containerRestartCountLabel] = strconv.Itoa(restartCount)
 	annotations[containerTerminationMessagePathLabel] = container.TerminationMessagePath

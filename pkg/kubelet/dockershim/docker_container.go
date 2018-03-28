@@ -152,6 +152,37 @@ func (ds *dockerService) CreateContainer(_ context.Context, r *runtimeapi.Create
 	}
 	hc.Resources.Devices = devices
 
+    glog.Infof("get read/write rate from anntations")
+	annotations := config.GetAnnotations()
+
+	if readIops, ok :=annotations["BlkioDeviceReadIOps"]; ok && "" != annotations["BlkioDeviceReadIOps"]{
+		hc.Resources.BlkioDeviceReadIOps, err = parseThrottleDevice(readIops)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get BlkioDeviceReadIOps from annotations %q: %v", annotations, err)
+		}
+	}
+
+	if writeIops, ok :=annotations["BlkioDeviceWriteIOps"]; ok && "" != annotations["BlkioDeviceWriteIOps"]{
+		hc.Resources.BlkioDeviceWriteIOps, err = parseThrottleDevice(writeIops)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get BlkioDeviceWriteIOps from annotations %q: %v", annotations, err)
+		}
+	}
+
+	if readBps, ok :=annotations["BlkioDeviceReadBps"]; ok && "" != annotations["BlkioDeviceReadBps"]{
+		hc.Resources.BlkioDeviceReadBps, err = parseThrottleDevice(readBps)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get BlkioDeviceReadBps from annotations %q: %v", annotations, err)
+		}
+	}
+
+	if writeBps, ok :=annotations["BlkioDeviceWriteBps"]; ok && "" != annotations["BlkioDeviceWriteBps"]{
+		hc.Resources.BlkioDeviceWriteBps, err = parseThrottleDevice(writeBps)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get BlkioDeviceWriteBps from annotations %q: %v", annotations, err)
+		}
+	}
+
 	securityOpts, err := ds.getSecurityOpts(config.GetLinux().GetSecurityContext().GetSeccompProfilePath(), securityOptSeparator)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate security options for container %q: %v", config.Metadata.Name, err)

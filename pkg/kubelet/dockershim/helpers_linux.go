@@ -25,11 +25,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/blang/semver"
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
+	dockerblkiodev "github.com/docker/docker/api/types/blkiodev"
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 )
 
@@ -149,4 +151,25 @@ func getNetworkNamespace(c *dockertypes.ContainerJSON) (string, error) {
 
 // applyExperimentalCreateConfig applys experimental configures from sandbox annotations.
 func applyExperimentalCreateConfig(createConfig *dockertypes.ContainerCreateConfig, annotations map[string]string) {
+}
+
+func parseThrottleDevice(str string) ([]*dockerblkiodev.ThrottleDevice, error){
+	var td []*dockerblkiodev.ThrottleDevice
+	if "" == str {
+		return nil, fmt.Errorf("parameter is empty.")
+	}
+	s := strings.Split(str,",")
+	for _,x :=range s {
+		kvPair := strings.Split(x,":")
+		if len(kvPair) != 2 {
+			return nil,fmt.Errorf("failed to parse the container read/wirte rate %q.", kvPair)
+		}
+		rate, err := strconv.ParseUint(kvPair[1], 10, 64)
+		if err != nil {
+			fmt.Errorf("failed to parse the container read/wirte rate %v.", kvPair[1])
+			return nil, err
+		}
+		td = append(td,&(dockerblkiodev.ThrottleDevice{Path: kvPair[0],Rate: rate}))
+	}
+	return td, nil
 }
