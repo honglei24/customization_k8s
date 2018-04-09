@@ -123,6 +123,7 @@ func newContainerAnnotations(container *v1.Container, pod *v1.Pod, restartCount 
 	annotations["BlkioDeviceWriteIOps"]=pod.Annotations["BlkioDeviceWriteIOps"]
 	annotations["BlkioDeviceReadBps"]=pod.Annotations["BlkioDeviceReadBps"]
 	annotations["BlkioDeviceWriteBps"]=pod.Annotations["BlkioDeviceWriteBps"]
+	annotations["storageOptSize"]=pod.Annotations["storageOptSize"]
 
 	annotations[containerHashLabel] = strconv.FormatUint(kubecontainer.HashContainer(container), 16)
 	annotations[containerRestartCountLabel] = strconv.Itoa(restartCount)
