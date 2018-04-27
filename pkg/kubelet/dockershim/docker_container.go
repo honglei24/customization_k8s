@@ -30,6 +30,8 @@ import (
 
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/v1alpha1/runtime"
 	"k8s.io/kubernetes/pkg/kubelet/dockershim/libdocker"
+	"k8s.io/kubernetes/pkg/kubelet/kuberuntime"
+	"strings"
 )
 
 // ListContainers lists all containers matching the filter.
@@ -90,7 +92,8 @@ func (ds *dockerService) CreateContainer(podSandboxID string, config *runtimeapi
 		return "", fmt.Errorf("sandbox config is nil for container %q", config.Metadata.Name)
 	}
 
-	labels := makeLabels(config.GetLabels(), config.GetAnnotations())
+	annotations := config.GetAnnotations()
+	labels := makeLabels(config.GetLabels(), annotations)
 	// Apply a the container type label.
 	labels[containerTypeLabelKey] = containerTypeLabelContainer
 	// Write the container log path in the labels.
@@ -153,6 +156,17 @@ func (ds *dockerService) CreateContainer(podSandboxID string, config *runtimeapi
 
 	hc.SecurityOpt = append(hc.SecurityOpt, securityOpts...)
 
+	if lxcfsEnable, ok := annotations[kuberuntime.ContainerLxcfsEnable]; ok && strings.ToLower(lxcfsEnable) == "true"{
+		glog.V(4).Info("lxcfs is enabled.")
+		var lxcfsItems = []string{"meminfo", "cpuinfo", "diskstats", "uptime", "stat", "swaps"}
+		for _, item := range lxcfsItems{
+			bindInfo := fmt.Sprintf(lxcfsMountPathFmt, item, item)
+			if !stringInSlice(bindInfo, hc.Binds) {
+				hc.Binds = append(hc.Binds, bindInfo)
+			}
+		}
+	}
+
 	createResp, err := ds.client.CreateContainer(createConfig)
 	if err != nil {
 		createResp, err = recoverFromCreationConflictIfNeeded(ds.client, createConfig, err)
@@ -162,6 +176,15 @@ func (ds *dockerService) CreateContainer(podSandboxID string, config *runtimeapi
 		return createResp.ID, err
 	}
 	return "", err
+}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a{
+			return true
+		}
+	}
+	return false
 }
 
 // getContainerLogPath returns the container log path specified by kubelet and the real
