@@ -60,6 +60,7 @@ const (
 	namespaceModeHost = "host"
 
 	dockerNetNSFmt = "/proc/%v/ns/net"
+	lxcfsMountPathFmt = "/var/lib/lxcfs/proc/%v:/proc/%v"
 
 	defaultSeccompProfile = "unconfined"
 
