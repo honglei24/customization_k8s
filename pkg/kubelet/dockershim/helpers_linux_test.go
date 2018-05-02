@@ -27,6 +27,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dockerblkiodev "github.com/docker/docker/api/types/blkiodev"
 )
 
 func TestGetSeccompSecurityOpts(t *testing.T) {
@@ -100,4 +101,16 @@ func TestLoadSeccompLocalhostProfiles(t *testing.T) {
 			assert.Contains(t, opts, opt, "TestCase[%d]: %s", i, test.msg)
 		}
 	}
+}
+
+func TestParseThrottleDevice(t *testing.T) {
+	annotations := make(map[string]string)
+	key := "io.kubernetes.container.readIOps"
+	annotations[key] = "/dev/sda:100,/dev/sdb:200"
+	var td []*dockerblkiodev.ThrottleDevice
+	td = append(td,&(dockerblkiodev.ThrottleDevice{Path: "/dev/sda",Rate: 100}))
+	td = append(td,&(dockerblkiodev.ThrottleDevice{Path: "/dev/sdb",Rate: 200}))
+	ret, err := parseThrottleDevice(annotations, key)
+	assert.NoError(t, err)
+	assert.Equal(t, ret, td)
 }

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
@@ -31,7 +32,6 @@ import (
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/v1alpha1/runtime"
 	"k8s.io/kubernetes/pkg/kubelet/dockershim/libdocker"
 	"k8s.io/kubernetes/pkg/kubelet/kuberuntime"
-	"strings"
 )
 
 // ListContainers lists all containers matching the filter.
@@ -156,6 +156,7 @@ func (ds *dockerService) CreateContainer(podSandboxID string, config *runtimeapi
 
 	hc.SecurityOpt = append(hc.SecurityOpt, securityOpts...)
 
+	// set lxcfs mount path for container.
 	if lxcfsEnable, ok := annotations[kuberuntime.ContainerLxcfsEnable]; ok && strings.ToLower(lxcfsEnable) == "true"{
 		glog.V(4).Info("lxcfs is enabled.")
 		var lxcfsItems = []string{"meminfo", "cpuinfo", "diskstats", "uptime", "stat", "swaps"}
@@ -165,6 +166,32 @@ func (ds *dockerService) CreateContainer(podSandboxID string, config *runtimeapi
 				hc.Binds = append(hc.Binds, bindInfo)
 			}
 		}
+	}
+
+	glog.V(4).Infof("set container storage size.")
+	if storageOptSize, ok := annotations[kuberuntime.ContainerBaseSize]; ok && "" != storageOptSize {
+		hc.StorageOpt = make(map[string]string)
+		hc.StorageOpt["size"] = storageOptSize
+	}
+
+	glog.V(4).Infof("set container iops/bps rate.")
+	hc.Resources.BlkioDeviceReadIOps, err = parseThrottleDevice(annotations, kuberuntime.ContainerReadIOps)
+	if err != nil {
+		return "", fmt.Errorf("failed to get BlkioDeviceReadIOps from annotations %q: %v", annotations, err)
+	}
+
+	hc.Resources.BlkioDeviceWriteIOps, err = parseThrottleDevice(annotations, kuberuntime.ContainerWriteIOps)
+	if err != nil {
+		return "", fmt.Errorf("failed to get BlkioDeviceWriteIOps from annotations %q: %v", annotations, err)
+	}
+
+	hc.Resources.BlkioDeviceReadBps, err = parseThrottleDevice(annotations, kuberuntime.ContainerReadBps)
+	if err != nil {
+		return "", fmt.Errorf("failed to get BlkioDeviceReadBps from annotations %q: %v", annotations, err)
+	}
+	hc.Resources.BlkioDeviceWriteBps, err = parseThrottleDevice(annotations, kuberuntime.ContainerWriteBps)
+	if err != nil {
+		return "", fmt.Errorf("failed to get BlkioDeviceWriteBps from annotations %q: %v", annotations, err)
 	}
 
 	createResp, err := ds.client.CreateContainer(createConfig)

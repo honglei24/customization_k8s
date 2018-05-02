@@ -25,11 +25,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/blang/semver"
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
+	dockerblkiodev "github.com/docker/docker/api/types/blkiodev"
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/v1alpha1/runtime"
 )
 
@@ -144,4 +146,26 @@ func getNetworkNamespace(c *dockertypes.ContainerJSON) (string, error) {
 		return "", fmt.Errorf("cannot find network namespace for the terminated container %q", c.ID)
 	}
 	return fmt.Sprintf(dockerNetNSFmt, c.State.Pid), nil
+}
+
+func parseThrottleDevice(annotations map[string]string, key string) ([]*dockerblkiodev.ThrottleDevice, error){
+	str, _ := annotations[key]
+	if "" == str {
+		return nil, nil
+	}
+	var td []*dockerblkiodev.ThrottleDevice
+	s := strings.Split(str,",")
+	for _,x := range s {
+		kvPair := strings.Split(x,":")
+		if len(kvPair) != 2 {
+			return nil,fmt.Errorf("failed to parse the container read/wirte rate %q.", kvPair)
+		}
+		rate, err := strconv.ParseUint(kvPair[1], 10, 64)
+		if err != nil {
+			fmt.Errorf("failed to parse the container read/wirte rate %v.", kvPair[1])
+			return nil, err
+		}
+		td = append(td,&(dockerblkiodev.ThrottleDevice{Path: kvPair[0],Rate: rate}))
+	}
+	return td, nil
 }

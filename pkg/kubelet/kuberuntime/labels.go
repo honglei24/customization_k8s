@@ -39,7 +39,13 @@ const (
 	containerTerminationMessagePolicyLabel = "io.kubernetes.container.terminationMessagePolicy"
 	containerPreStopHandlerLabel           = "io.kubernetes.container.preStopHandler"
 	containerPortsLabel                    = "io.kubernetes.container.ports"
+
 	ContainerLxcfsEnable                   = "io.kubernetes.container.lxcfsEnable"
+	ContainerReadIOps                      = "io.kubernetes.container.readIOps"
+	ContainerWriteIOps                     = "io.kubernetes.container.writeIOps"
+	ContainerReadBps                       = "io.kubernetes.container.readBps"
+	ContainerWriteBps                      = "io.kubernetes.container.writeBps"
+	ContainerBaseSize                      = "io.kubernetes.container.baseSize"
 )
 
 type labeledPodSandboxInfo struct {
@@ -112,7 +118,10 @@ func newContainerAnnotations(container *v1.Container, pod *v1.Pod, restartCount 
 	annotations[containerRestartCountLabel] = strconv.Itoa(restartCount)
 	annotations[containerTerminationMessagePathLabel] = container.TerminationMessagePath
 	annotations[containerTerminationMessagePolicyLabel] = string(container.TerminationMessagePolicy)
-	annotations[ContainerLxcfsEnable] = pod.Annotations[ContainerLxcfsEnable]
+
+	for _, key := range []string {ContainerLxcfsEnable, ContainerReadBps, ContainerWriteBps, ContainerReadIOps, ContainerWriteIOps, ContainerBaseSize} {
+		annotations[key] = pod.Annotations[key]
+	}
 
 	if pod.DeletionGracePeriodSeconds != nil {
 		annotations[podDeletionGracePeriodLabel] = strconv.FormatInt(*pod.DeletionGracePeriodSeconds, 10)
