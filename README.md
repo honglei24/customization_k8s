@@ -1,86 +1,96 @@
-# Kubernetes
+# 支持lxcfs
 
-[![Submit Queue Widget]][Submit Queue] [![GoDoc Widget]][GoDoc] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/569/badge)](https://bestpractices.coreinfrastructure.org/projects/569)
-
-<img src="https://github.com/kubernetes/kubernetes/raw/master/logo/logo.png" width="100">
-
-----
-
-Kubernetes is an open source system for managing [containerized applications]
-across multiple hosts, providing basic mechanisms for deployment, maintenance,
-and scaling of applications.
-
-Kubernetes builds upon a decade and a half of experience at Google running
-production workloads at scale using a system called [Borg],
-combined with best-of-breed ideas and practices from the community.
-
-Kubernetes is hosted by the Cloud Native Computing Foundation ([CNCF]).
-If you are a company that wants to help shape the evolution of
-technologies that are container-packaged, dynamically-scheduled
-and microservices-oriented, consider joining the CNCF.
-For details about who's involved and how Kubernetes plays a role,
-read the CNCF [announcement].
-
-----
-
-## To start using Kubernetes
-
-See our documentation on [kubernetes.io].
-
-Try our [interactive tutorial].
-
-Take a free course on [Scalable Microservices with Kubernetes].
-
-## To start developing Kubernetes
-
-The [community repository] hosts all information about
-building Kubernetes from source, how to contribute code
-and documentation, who to contact about what, etc.
-
-If you want to build Kubernetes right away there are two options:
-
-##### You have a working [Go environment].
-
+## 前提条件
+#### 安装lxcfs
 ```
-$ go get -d k8s.io/kubernetes
-$ cd $GOPATH/src/k8s.io/kubernetes
-$ make
+yum install lxcfs
 ```
 
-##### You have a working [Docker environment].
-
+#### 修改lxcfs.service文件
 ```
-$ git clone https://github.com/kubernetes/kubernetes
-$ cd kubernetes
-$ make quick-release
+[Unit]
+Description=FUSE filesystem for LXC
+ConditionVirtualization=!container
+Before=lxc.service
+Documentation=man:lxcfs(1)
+
+[Service]
+ExecStart=/usr/bin/lxcfs /var/lib/lxc/lxcfs/
+KillMode=process
+Restart=always
+#ExecStopPost=-/bin/fusermount -u /var/lib/lxc/lxcfs
+Delegate=yes
+ExecStartPost=/usr/local/bin/remount_lxcfs.sh
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-If you are less impatient, head over to the [developer's documentation].
+启动lxcfs
+```
+# mkdir -p /var/lib/lxc/lxcfs/
+# systemctl daemon-reload
+# systemctl restart lxcfs
+# systemctl enable lxcfs
+```
 
-## Support
+#### 修改/usr/local/bin/remount_lxcfs.sh
+改脚本实现了lxcfs服务重启时候的重新挂载
+```
+#!/bin/sh
 
-If you need support, start with the [troubleshooting guide]
-and work your way through the process that we've outlined.
+LXCFS="/var/lib/lxc/lxcfs"
 
-That said, if you have questions, reach out to us
-[one way or another][communication].
+containers=$(docker ps --format {{.Names}}|grep -v "k8s_POD")
+for c in $containers;do
+	echo "Remounting lxcfs for $c"
+	PID=$(docker inspect $c --format '{{.State.Pid}}')
+	for file in meminfo cpuinfo stat uptime swaps diskstats;do
+                nsenter --target ${PID} --mount test -e $LXCFS/proc/$file
+                [ $? -eq 0 ] || continue 
+		nsenter --target ${PID} --mount -- mount -B "$LXCFS/proc/$file" "/proc/$file"
+	done
+done
+```
 
-[announcement]: https://cncf.io/news/announcement/2015/07/new-cloud-native-computing-foundation-drive-alignment-among-container
-[Borg]: https://research.google.com/pubs/pub43438.html
-[CNCF]: https://www.cncf.io/about
-[communication]: https://github.com/kubernetes/community/blob/master/communication.md
-[community repository]: https://github.com/kubernetes/community
-[containerized applications]: https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/
-[developer's documentation]: https://github.com/kubernetes/community/tree/master/contributors/devel
-[Docker environment]: https://docs.docker.com/engine
-[Go environment]: https://golang.org/doc/install
-[GoDoc]: https://godoc.org/k8s.io/kubernetes
-[GoDoc Widget]: https://godoc.org/k8s.io/kubernetes?status.svg
-[interactive tutorial]: http://kubernetes.io/docs/tutorials/kubernetes-basics
-[kubernetes.io]: http://kubernetes.io
-[Scalable Microservices with Kubernetes]: https://www.udacity.com/course/scalable-microservices-with-kubernetes--ud615
-[Submit Queue]: http://submit-queue.k8s.io/#/ci
-[Submit Queue Widget]: http://submit-queue.k8s.io/health.svg?v=1
-[troubleshooting guide]: https://kubernetes.io/docs/tasks/debug-application-cluster/troubleshooting/ 
+## 使用方法：
+定义pod的时候在pod注解里加入io.kubernetes.container.lxcfsEnable，示例如下
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox 
+  namespace: default
+  annotations:
+    io.kubernetes.container.lxcfsEnable: "True"
+spec:
+  hostNetwork: true
+  nodeSelector:
+    kubernetes.io/hostname: kube-node03
+  containers:
+  - command:
+    - sleep
+    - "36000"
+    image: centos:latest 
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: "1"
+        memory: 512Mi
+    name: busybox
+```
 
-[![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/README.md?pixel)]()
+## 实现原理
+在pod注解里指定io.kubernetes.container.lxcfsEnable: "True"的时候，在容器启动的时候挂载了下列目录，实现了资源隔离的可见性。
+```
+-v /var/lib/lxc/:/var/lib/lxc/:shared  \
+-v /var/lib/lxc/lxcfs/proc/uptime:/proc/uptime \
+-v /var/lib/lxc/lxcfs/proc/swaps:/proc/swaps  \
+-v /var/lib/lxc/lxcfs/proc/stat:/proc/stat  \
+-v /var/lib/lxc/lxcfs/proc/diskstats:/proc/diskstats \
+-v /var/lib/lxc/lxcfs/proc/meminfo:/proc/meminfo \
+-v /var/lib/lxc/lxcfs/proc/cpuinfo:/proc/cpuinfo
+```
+参考：https://github.com/pouchcontainer/blog/issues/3
