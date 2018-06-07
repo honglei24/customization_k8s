@@ -158,6 +158,7 @@ func (ds *dockerService) CreateContainer(podSandboxID string, config *runtimeapi
 
 	if lxcfsEnable, ok := annotations[kuberuntime.ContainerLxcfsEnable]; ok && strings.ToLower(lxcfsEnable) == "true"{
 		glog.V(4).Info("lxcfs is enabled.")
+		hc.Binds = append(hc.Binds, "/var/lib/lxc/:/var/lib/lxc/:shared")
 		var lxcfsItems = []string{"meminfo", "cpuinfo", "diskstats", "uptime", "stat", "swaps"}
 		for _, item := range lxcfsItems{
 			bindInfo := fmt.Sprintf(lxcfsMountPathFmt, item, item)
